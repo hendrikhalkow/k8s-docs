@@ -4,3 +4,4 @@ cp-helm-charts/
 openssl.cnf
 tls/
 .vscode/
+ca/

@@ -1,5 +1,12 @@
 # Transport Layer Security all in One
 
+```zsh
+brew install openssl
+export PATH="/usr/local/opt/openssl/bin:${PATH}"
+PS1="${PS1_ORIGINAL}"
+PS1="%{$fg[red]%}${CA}${PS1_ORIGINAL}"
+```
+
 This guide is inspired by
 <https://jamielinux.com/docs/openssl-certificate-authority/>.
 
@@ -98,93 +105,185 @@ MINIKUBE_CERTIFICATE_PASSWORD="$(security find-generic-password -a ${USER} \
 ## Root CA
 
 ```zsh
-ROOT_CA_DIR="${TLS_DIR}/root-ca"
+CA="Hendrik M Halkow Root CA"
+PARENT_CA=""
 
-# Create directory and structure.
-mkdir -p "${ROOT_CA_DIR}"
-cd "${ROOT_CA_DIR}"
-mkdir certs crl csr newcerts private
-chmod 700 private
-touch index.txt
-echo 1000 > serial
+# Set context variables.
+CA_DIR="${CA_BASE_DIR}/${CA}"
+CA_PASSWORD="$(security find-generic-password -a ${USER} -s "${CA}" -w)"
+if [ -z "${CA_PASSWORD}" ]; then
+  CA_PASSWORD="$(cat /dev/random | LC_ALL=C tr -dc a-zA-Z0-9 | head -c 43)"
+  security add-generic-password -a "${USER}" -s "${CA}" -w "${CA_PASSWORD}"
+fi
+echo "${CA}"
+echo "Directory: ${CA_DIR}"
+echo "Password: ${CA_PASSWORD}"
+PS1="%{$fg[red]%}${CA}${PS1_ORIGINAL}"
 
-# Generate private key for root CA and encrypt it with our password.
+# Initialize CA.
+mkdir -p "${CA_DIR}"/{certs,crl,csr,newcerts,private}/
+chmod 0700 "${CA_DIR}/private"
+touch "${CA_DIR}/index.txt"
+echo 1000 > "${CA_DIR}/serial"
 openssl genrsa \
   -aes256 \
-  -passout "pass:${ROOT_CA_PASSWORD}" \
-  -out private/ca.key.pem 4096
-chmod 400 private/ca.key.pem
-```
+  -passout "pass:${CA_PASSWORD}" \
+  -out "${CA_DIR}/private/${CA}.key.pem" 4096
+ln -s "${CA}.key.pem" "${CA_DIR}/private/key.pem"
+chmod 0400 "${CA_DIR}/private/${CA}.key.pem"
 
-Copy your [root-ca.cnf](#root-ca-configuration-file) into the `${ROOT_CA_DIR}`
-folder and adjust the distingushed name accordingly.
+# Copy in openssl.cnf
+cp "${CA_BASE_DIR}/${CA}.cnf" "${CA_DIR}/openssl.cnf"
 
-```zsh
 # Create root certificate.
-openssl req -config root-ca.cnf \
-  -key private/ca.key.pem \
-  -passin "pass:${ROOT_CA_PASSWORD}" \
-  -new -x509 -days 7300 -sha256 -extensions v3_ca \
-  -out certs/ca.cert.pem
-chmod 444 certs/ca.cert.pem
+openssl req \
+  -config "${CA_DIR}/openssl.cnf" \
+  -key "${CA_DIR}/private/${CA}.key.pem" \
+  -passin "pass:${CA_PASSWORD}" \
+  -new \
+  -x509 \
+  -days 7300 \
+  -sha256 \
+  -extensions v3_ca \
+  -out "${CA_DIR}/certs/${CA}.cert.pem"
+ln -s "${CA}.cert.pem" "${CA_DIR}/certs/cert.pem"
+chmod 0444 "${CA_DIR}/certs/${CA}.cert.pem"
+
+# Create certificate chains.
+cat "${CA_DIR}/certs/${CA}.cert.pem" > "${CA_DIR}/certs/${CA}.fullchain.pem"
+if [ -z "${PARENT_CA}" ]; then
+  echo -n > "${CA_DIR}/certs/${CA}.chain.pem"
+else
+  cat \
+  "${CA_DIR}/certs/${CA}.cert.pem" \
+  "${CA_BASE_DIR}/${PARENT_CA}/certs/${PARENT_CA}.chain.pem" \
+    > "${CA_DIR}/certs/${CA}.chain.pem"
+
+  cat "${CA_BASE_DIR}/${PARENT_CA}/certs/${PARENT_CA}.fullchain.pem" \
+    >> "${CA_DIR}/certs/${CA}.fullchain.pem"
+fi
+chmod 0444 "${CA_DIR}/certs/${CA}.chain.pem"
+chmod 0444 "${CA_DIR}/certs/${CA}.fullchain.pem"
+
+
+chmod 0444 "${CA_DIR}/certs/${CA}.chain.pem"
+
+cp "${CA_DIR}/certs/${CA}.cert.pem" "${CA_DIR}/certs/${CA}.fullchain.pem"
+chmod 0444 "${CA_DIR}/certs/${CA}.fullchain.pem"
 
 # View root certificate.
-openssl x509 -noout -text -in certs/ca.cert.pem
+openssl x509 -noout -text -in "${CA_DIR}/certs/cert.pem"
 
 # Add certificate to keychain.
 sudo security add-trusted-cert -d -k /Library/Keychains/System.keychain \
-  certs/ca.cert.pem
+  "${CA_DIR}/certs/cert.pem"
 ```
 
 To make your browsers trust that certificate, restart Chrome or Safari. If you
 use Firefox, you need to import this certificate via -> Preferences -> Privacy
 and Security -> View Certificates -> Import.
 
-## Intermediate CA
+## Minikube CA
 
 ```zsh
-INTERMEDIATE_CA_DIR="${TLS_DIR}/intermediate-ca"
+CA="Hendrik M Halkow Minikube CA"
+PARENT_CA="Hendrik M Halkow Root CA"
 
-mkdir -p "${INTERMEDIATE_CA_DIR}"
-cd "${INTERMEDIATE_CA_DIR}"
-mkdir certs crl csr newcerts private
-chmod 700 private
-touch index.txt
-echo 1000 > serial
-echo 1000 > crlnumber
+# Set context variables.
+CA_DIR="${CA_BASE_DIR}/${CA}"
+CA_PASSWORD="$(security find-generic-password -a ${USER} -s "${CA}" -w)"
+if [ -z "${CA_PASSWORD}" ]; then
+  CA_PASSWORD="$(cat /dev/random | LC_ALL=C tr -dc a-zA-Z0-9 | head -c 43)"
+  security add-generic-password -a "${USER}" -s "${CA}" -w "${CA_PASSWORD}"
+fi
+echo "${CA}"
+echo "Directory: ${CA_DIR}"
+echo "Password: ${CA_PASSWORD}"
+PS1="%{$fg[red]%}${CA}${PS1_ORIGINAL}"
 
+# Initialize CA.
+mkdir -p "${CA_DIR}"/{certs,crl,csr,newcerts,private}/
+chmod 0700 "${CA_DIR}/private"
+touch "${CA_DIR}/index.txt"
+echo 1000 > "${CA_DIR}/serial"
 openssl genrsa \
   -aes256 \
-  -passout "pass:${INTERMEDIATE_CA_PASSWORD}" \
-  -out private/intermediate.key.pem 4096
-chmod 400 private/intermediate.key.pem
-```
+  -passout "pass:${CA_PASSWORD}" \
+  -out "${CA_DIR}/private/${CA}.key.pem" 4096
+ln -s "${CA}.key.pem" "${CA_DIR}/private/key.pem"
+chmod 0400 "${CA_DIR}/private/${CA}.key.pem"
 
-Copy your [intermediate-ca.cnf](#intermediate-ca-configuration-file) to the
-`${INTERMEDIATE_CA_DIR}` folder and adjust the distingushed name accordingly.
+# Copy in openssl.cnf
+cp "${CA_BASE_DIR}/${CA}.cnf" "${CA_DIR}/openssl.cnf"
 
-```zsh
 openssl req \
-  -config intermediate-ca.cnf \
+  -config "${CA_DIR}/openssl.cnf" \
   -new \
   -sha256 \
-  -passin "pass:${INTERMEDIATE_CA_PASSWORD}" \
-  -key private/intermediate.key.pem \
-  -out csr/intermediate.csr.pem
+  -passin "pass:${CA_PASSWORD}" \
+  -key "${CA_DIR}/private/key.pem" \
+  -out "${CA_DIR}/csr/${CA}.csr.pem"
 
-cd "${ROOT_CA_DIR}"
-openssl ca -config root-ca.cnf -extensions v3_intermediate_ca \
-      -days 3650 -notext -md sha256 \
-      -passin "pass:${ROOT_CA_PASSWORD}" \
-      -in "${INTERMEDIATE_CA_DIR}/csr/intermediate.csr.pem" \
-      -out "${INTERMEDIATE_CA_DIR}/certs/intermediate.cert.pem"
-cp certs/ca.cert.pem "${INTERMEDIATE_CA_DIR}/certs/"
+# Copy CSR from CA to it's parent.
 
-cd "${INTERMEDIATE_CA_DIR}"
-openssl verify -CAfile certs/ca.cert.pem \
-  certs/intermediate.cert.pem
+CA_PARENT="Hendrik M Halkow Root CA"
+cp "${CA_DIR}/csr/${CA}.csr.pem" "${CA_BASE_DIR}/${CA_PARENT}/csr/"
 
-cat certs/intermediate.cert.pem certs/ca.cert.pem > certs/ca-chain.cert.pem
+
+CSR_DN="${CA}"
+
+CA="Hendrik M Halkow Root CA"
+
+# Set context variables.
+CA_DIR="${CA_BASE_DIR}/${CA}"
+CA_PASSWORD="$(security find-generic-password -a ${USER} -s "${CA}" -w)"
+if [ -z "${CA_PASSWORD}" ]; then
+  CA_PASSWORD="$(cat /dev/random | LC_ALL=C tr -dc a-zA-Z0-9 | head -c 43)"
+  security add-generic-password -a "${USER}" -s "${CA}" -w "${CA_PASSWORD}"
+fi
+echo "${CA}"
+echo "Directory: ${CA_DIR}"
+echo "Password: ${CA_PASSWORD}"
+PS1="%{$fg[red]%}${CA}${PS1_ORIGINAL}"
+
+openssl ca \
+  -config "${CA_DIR}/openssl.cnf" \
+  -extensions v3_intermediate_ca \
+  -days 3650 \
+  -notext \
+  -md sha256 \
+  -passin "pass:${CA_PASSWORD}" \
+  -in "${CA_DIR}/csr/${CSR_DN}.csr.pem" \
+  -out "${CA_DIR}/certs/${CSR_DN}.cert.pem"
+
+
+CA="Hendrik M Halkow Minikube CA"
+
+# Set context variables.
+CA_DIR="${CA_BASE_DIR}/${CA}"
+CA_PASSWORD="$(security find-generic-password -a ${USER} -s "${CA}" -w)"
+if [ -z "${CA_PASSWORD}" ]; then
+  CA_PASSWORD="$(cat /dev/random | LC_ALL=C tr -dc a-zA-Z0-9 | head -c 43)"
+  security add-generic-password -a "${USER}" -s "${CA}" -w "${CA_PASSWORD}"
+fi
+echo "${CA}"
+echo "Directory: ${CA_DIR}"
+echo "Password: ${CA_PASSWORD}"
+PS1="%{$fg[red]%}${CA}${PS1_ORIGINAL}"
+
+
+cp "${CA_BASE_DIR}/${CA_PARENT}/certs/${CSR_DN}.cert.pem" "${CA_DIR}/certs/"
+cp "${CA_BASE_DIR}/${CA_PARENT}/certs/cert.pem" "${CA_DIR}/certs/${CA_PARENT}.cert.pem"
+
+openssl verify -CAfile "${CA_DIR}/certs/${CA_PARENT}.cert.pem" \
+  "${CA_DIR}/certs/cert.pem"
+
+cat "${CA_DIR}/certs/cert.pem" "${CA_DIR}/certs/${CA_PARENT}.cert.pem" \
+  > "${CA_DIR}/certs/${CA}.fullchain.pem"
+
+cat "${CA_DIR}/certs/cert.pem" \
+  > "${CA_DIR}/certs/${CA}.chain.pem"
+
 chmod 444 certs/ca-chain.cert.pem
 ```
 
@@ -263,12 +362,12 @@ serial            = $dir/serial
 RANDFILE          = $dir/private/.rand
 
 # The root key and root certificate.
-private_key       = $dir/private/ca.key.pem
-certificate       = $dir/certs/ca.cert.pem
+private_key       = $dir/private/key.pem
+certificate       = $dir/certs/cert.pem
 
 # For certificate revocation lists.
 crlnumber         = $dir/crlnumber
-crl               = $dir/crl/ca.crl.pem
+crl               = $dir/crl/crl.pem
 crl_extensions    = crl_ext
 default_crl_days  = 30
 
