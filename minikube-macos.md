@@ -240,3 +240,31 @@ bash
 # Inside that container, try pinging the minikube hostname.
 ping minikube.local
 ```
+
+## Dashboard ingress
+
+```zsh
+cat <<EOD | kubectl create -f -
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  namespace: kube-system
+  name: kubernetes-dashboard
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.org/ssl-services: "kubernetes-dashboard"
+spec:
+  tls:
+  - hosts:
+    - kubernetes-dashboard.minikube.local
+    secretName: minikube-tls
+  rules:
+  - host: kubernetes-dashboard.minikube.local
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: kubernetes-dashboard
+          servicePort: 80
+EOD
+```

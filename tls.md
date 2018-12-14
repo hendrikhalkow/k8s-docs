@@ -8,6 +8,8 @@ This guide is inspired by
 - Create DH params for perfect forward secrecy using
   `openssl dhparam 4096  -out dhparam.pem`. See [1].
 - Describe TLS_DIR="..."
+- move configs to cfg folder
+- auto-generate config
 
 ## Windows considerations
 
@@ -195,8 +197,8 @@ cd "${INTERMEDIATE_CA_DIR}"
 openssl genrsa \
   -aes256 \
   -passout "pass:${MINIKUBE_CERTIFICATE_PASSWORD}" \
-  -out private/minikube.local.key.pem 2048
-chmod 0400 private/minikube.local.key.pem
+  -out "private/${K8S_NAMESPACE}.minikube.local.key.pem" 2048
+chmod 0400 "private/${K8S_NAMESPACE}.minikube.local.key.pem"
 ```
 
 Copy your [minikube.local.cnf](#minikube-certificate-configuration-file) to the
@@ -205,37 +207,37 @@ If you want to keep the domain minikube.local, no changes are required.
 
 ```zsh
 # Create minikube certificate signing request.
-openssl req -config minikube.local.cnf \
+openssl req -config "${K8S_NAMESPACE}.minikube.local.cnf" \
   -passin "pass:${MINIKUBE_CERTIFICATE_PASSWORD}" \
-  -key private/minikube.local.key.pem \
+  -key "private/${K8S_NAMESPACE}.minikube.local.key.pem" \
   -new \
   -sha256 \
-  -out csr/minikube.local.csr.pem
+  -out "csr/${K8S_NAMESPACE}.minikube.local.csr.pem"
 
 # Create minikube certificate.
 openssl ca \
-  -pass "pass:${INTERMEDIATE_CA_PASSWORD}" \
-  -config ./minikube.local.cnf \
+  -passin "pass:${INTERMEDIATE_CA_PASSWORD}" \
+  -config ./${K8S_NAMESPACE}.minikube.local.cnf \
   -extensions server_cert \
   -days 375 \
   -notext \
   -md sha256 \
-  -in ./csr/minikube.local.csr.pem \
-  -out ./certs/minikube.local.cert.pem
+  -in "csr/${K8S_NAMESPACE}.minikube.local.csr.pem" \
+  -out "certs/${K8S_NAMESPACE}.minikube.local.cert.pem"
 
 # Set certificate permissions.
-chmod 0444 certs/minikube.local.cert.pem
+chmod 0444 "certs/${K8S_NAMESPACE}.minikube.local.cert.pem"
 
 # View certificate.
-openssl x509 -noout -text -in certs/minikube.local.cert.pem
+openssl x509 -noout -text -in "certs/${K8S_NAMESPACE}.minikube.local.cert.pem"
 
 # Import certificate chain and key into Kubernetes.
 kubectl --namespace "${K8S_NAMESPACE}" create secret tls minikube-tls \
   --key <(openssl rsa \
-    -in ${INTERMEDIATE_CA_DIR}/private/minikube.local.key.pem \
+    -in ${INTERMEDIATE_CA_DIR}/private/${K8S_NAMESPACE}.minikube.local.key.pem \
     -passin pass:${MINIKUBE_CERTIFICATE_PASSWORD}) \
   --cert <(cat \
-    ${INTERMEDIATE_CA_DIR}/certs/minikube.local.cert.pem \
+    ${INTERMEDIATE_CA_DIR}/certs/${K8S_NAMESPACE}.minikube.local.cert.pem \
     ${INTERMEDIATE_CA_DIR}/certs/intermediate.cert.pem)
 ```
 

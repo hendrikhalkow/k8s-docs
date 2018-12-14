@@ -25,10 +25,10 @@ metadata:
 spec:
   tls:
     - hosts:
-      - keycloak.minikube.local
+      - keycloak.otto.minikube.local
       secretName: minikube-tls
   rules:
-  - host: keycloak.minikube.local
+  - host: keycloak.otto.minikube.local
     http:
       paths:
       - path: /
