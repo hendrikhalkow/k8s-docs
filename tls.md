@@ -289,6 +289,9 @@ export CA="$(id -F) Root CA"
 ca_set_context
 PARENT_CA="" ca_init
 
+# Delete old certificate if it exists.
+sudo security delete-certificate -c "${CA}" -t 2>/dev/null || true
+
 # Add root CA to key chain.
 sudo security add-trusted-cert -d -k /Library/Keychains/System.keychain \
   "${CA_DIR}/cert.pem"
