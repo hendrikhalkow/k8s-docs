@@ -128,6 +128,7 @@ function ca_init() {
       -out "${CA_DIR}/certs/${CA}.cert.pem" \
       -subj "/C=DE/ST=Hamburg/L=Hamburg/O=$(id -F)/CN=${CA}"
     touch "${CA_DIR}/chain.pem"
+    cat "${CA_DIR}/certs/${CA}.cert.pem" >> "${CA_DIR}/fullchain.pem"
   else
     openssl req \
       -new \
@@ -155,10 +156,11 @@ function ca_init() {
     )
     cat "${CA_DIR}/certs/${CA}.cert.pem" >> "${CA_DIR}/chain.pem"
     cat "${CA_BASE_DIR}/${PARENT_CA}/chain.pem" >> "${CA_DIR}/chain.pem"
+
+    cat "${CA_DIR}/certs/${CA}.cert.pem" >> "${CA_DIR}/fullchain.pem"
+    cat "${CA_BASE_DIR}/${PARENT_CA}/fullchain.pem" >> "${CA_DIR}/fullchain.pem"
   fi
   ln -s "certs/${CA}.cert.pem" "${CA_DIR}/cert.pem"
-  cat "${CA_DIR}/cert.pem" >> "${CA_DIR}/fullchain.pem"
-  cat "${CA_BASE_DIR}/${PARENT_CA}/fullchain.pem" >> "${CA_DIR}/fullchain.pem"
 }
 
 # The OpenSSL config file we will use.
@@ -284,11 +286,13 @@ PARENT_CA="" ca_init
 # Add root CA to key chain.
 sudo security add-trusted-cert -d -k /Library/Keychains/System.keychain \
   "${CA_DIR}/cert.pem"
+```
 
 To make your browsers trust that certificate, restart Chrome or Safari. If you
 use Firefox, you need to import this certificate via -> Preferences -> Privacy
 and Security -> View Certificates -> Import.
 
+```zsh
 # Minikube CA.
 export CA="$(id -F) Minikube CA"
 ca_set_context
@@ -386,7 +390,9 @@ kubectl --namespace "${K8S_NAMESPACE}" create secret tls minikube-tls \
   --key <(openssl rsa \
     -in "${CA_DIR}/private/${TLS_CERT_DOMAIN}.key.pem" \
     -passin "pass:${TLS_CERT_PASSWORD}") \
-  --cert <(cat "${CA_DIR}/chain.pem")
+  --cert <(cat \
+    "${CA_DIR}/certs/${TLS_CERT_DOMAIN}.cert.pem" \
+    "${CA_DIR}/chain.pem")
 ```
 
 ## Create custom DH parameters for perfect forward secrecy
