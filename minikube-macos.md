@@ -4,7 +4,7 @@
 
 - brew tap for coredns
 - /etc/resolver/minikube.local
-- hyperkit vm driver
+- don't use hyperkit vm driver
 - document why ssl in docker
 - reboot on hypervisor change due to messed up network configuration
 - ingress for dashboard
@@ -265,6 +265,10 @@ ping minikube.local
 
 ## Dashboard ingress
 
+If you haven't done so, create a TLS certificate for your domain and import it
+into your cluster as described in the [custom CA documentation](tls.md).
+In this example, we use `kube-system.minikube.local` as our domain.
+
 ```zsh
 cat <<EOD | kubectl create -f -
 apiVersion: extensions/v1beta1
@@ -278,10 +282,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - kubernetes-dashboard.minikube.local
+    - dashboard.kube-system.minikube.local
     secretName: minikube-tls
   rules:
-  - host: kubernetes-dashboard.minikube.local
+  - host: dashboard.kube-system.minikube.local
     http:
       paths:
       - path: /
