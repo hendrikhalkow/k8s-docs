@@ -5,6 +5,14 @@ git clone git@github.com:coreos/prometheus-operator.git
 cd prometheus-operator/contrib/kube-prometheus
 kubectl create -f manifests/
 
+kubectl --namespace monitoring create secret tls minikube-tls \
+  --key <(openssl rsa \
+    -in ${INTERMEDIATE_CA_DIR}/private/minikube.local.key.pem \
+    -passin pass:${MINIKUBE_CERTIFICATE_PASSWORD}) \
+  --cert <(cat \
+    ${INTERMEDIATE_CA_DIR}/certs/minikube.local.cert.pem \
+    ${INTERMEDIATE_CA_DIR}/certs/intermediate.cert.pem)
+
 cat <<EOD | kubectl create -f -
 apiVersion: extensions/v1beta1
 kind: Ingress
@@ -28,6 +36,8 @@ spec:
           serviceName: grafana
           servicePort: http
 EOD
+
+
 
 cat <<EOD | kubectl create -f -
 apiVersion: extensions/v1beta1

@@ -24,9 +24,20 @@ curl -s "https://get.sdkman.io" | bash
 
 # Install required packages.
 brew install kubernetes-cli jq coredns
-brew cask install minikube vmware-fusion
 sdk install java
 sdk install gradle
+
+# Install at least one of the following 3:
+# 1)
+brew cask install minikube vmware-fusion
+# 2)
+brew cask install minikube virtualbox
+# 3)
+brew install docker-machine-driver-hyperkit
+DMDH_PATH="/usr/local/opt/docker-machine-driver-hyperkit/bin"
+DMDH_PATH="${DMDH_PATH}/docker-machine-driver-hyperkit"
+sudo chown root:wheel "${DMDH_PATH}"
+sudo chmod u+s "${DMDH_PATH}"
 ```
 
 ## Start up Minikube
@@ -39,13 +50,14 @@ brew cask upgrade
 
 # In case you want to start freshly, remove your old minikube.
 minikube delete
-rm -rf "${HOME}/minikube"
+rm -rf "${HOME}/.minikube"
 
-# Get latest Kubernetes version from GitHub.
-K8S_VERSION="$(curl -Ls \
-  https://api.github.com/repos/kubernetes/kubernetes/releases/latest \
-  | jq -r '.name')"
-echo "Using Kubernetes version ${K8S_VERSION}"
+# List all Kubernetes versions
+curl -Ls https://api.github.com/repos/kubernetes/kubernetes/releases | \
+  jq -r '.[].name'
+
+# Choose your desired version, for example
+K8S_VERSION="v1.13.1"
 
 # Start Minikube. Adjust CPU cores and memory to your needs. If you are unsure,
 # leave these parameters out. The following examples uses half of the logical
@@ -56,9 +68,17 @@ minikube start \
   --cpus="$(( $(sysctl -n hw.ncpu) / 2 ))" \
   --memory="$(( $(sysctl -n hw.memsize) / 1024**2 / 2 ))"
 
-# Alternatively, use VirtualBox.
+# Alternatively, use VirtualBox. Be aware that VirtualBox does not work with
+# nested virtualization.
 minikube start \
   --vm-driver=virtualbox \
+  --kubernetes-version="${K8S_VERSION}" \
+  --cpus="$(( $(sysctl -n hw.ncpu) / 2 ))" \
+  --memory="$(( $(sysctl -n hw.memsize) / 1024**2 / 2 ))"
+
+# ... or HyperKit. Be aware that routing into HyperKit does not work.
+minikube start \
+  --vm-driver=hyperkit \
   --kubernetes-version="${K8S_VERSION}" \
   --cpus="$(( $(sysctl -n hw.ncpu) / 2 ))" \
   --memory="$(( $(sysctl -n hw.memsize) / 1024**2 / 2 ))"
@@ -138,6 +158,8 @@ done
 ```
 
 ## Resolve Kubernetes services from host
+
+Attention: The following does not work with the HyperKit driver.
 
 ```zsh
 # Install minikube-lb-patch to make load balancers get an IP address
