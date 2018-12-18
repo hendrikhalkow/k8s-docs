@@ -86,6 +86,9 @@ If you don't like this, you can also create your own passwords.
 # In case we use this shell interactively, set path to Homebrew's OpenSSL.
 export PATH="/usr/local/opt/openssl/bin:${PATH}"
 
+# Directory that contains all CAs.
+export CA_BASE_DIR="/usr/local/etc/openssl/ca"
+
 # Save PS1 to restore it later.
 if [ -z "${PS1_ORIGINAL}" ]; then PS1_ORIGINAL="${PS1}"; fi
 
@@ -115,7 +118,7 @@ function ca_init() {
   -passout "pass:${CA_PASSWORD}" \
   -out "${CA_DIR}/private/${CA}.key.pem" 4096
   ln -s "${CA}.key.pem" "${CA_DIR}/private/key.pem"
-  chmod og-rwx "${CA_DIR}/private/${CA}.key.pem"
+  chmod 0400 "${CA_DIR}/private/${CA}.key.pem"
   if [ -z "${PARENT_CA}" ]; then
     openssl req \
       -new \
@@ -127,6 +130,7 @@ function ca_init() {
       -passin "pass:${CA_PASSWORD}" \
       -out "${CA_DIR}/certs/${CA}.cert.pem" \
       -subj "/C=DE/ST=Hamburg/L=Hamburg/O=$(id -F)/CN=${CA}"
+    chmod 0444 "${CA_DIR}/certs/${CA}.cert.pem"
     touch "${CA_DIR}/chain.pem"
     cat "${CA_DIR}/certs/${CA}.cert.pem" >> "${CA_DIR}/fullchain.pem"
   else
@@ -152,6 +156,7 @@ function ca_init() {
         -passin "pass:${CA_PASSWORD}" \
         -in "${CA_DIR}/csr/${CSR_DN}.csr.pem" \
         -out "${CA_DIR}/certs/${CSR_DN}.cert.pem"
+      chmod 0444 "${CA_DIR}/certs/${CSR_DN}.cert.pem"
       cp "${CA_DIR}/certs/${CSR_DN}.cert.pem" "${CA_BASE_DIR}/${CSR_DN}/certs/"
     )
     cat "${CA_DIR}/certs/${CA}.cert.pem" >> "${CA_DIR}/chain.pem"
@@ -161,6 +166,8 @@ function ca_init() {
     cat "${CA_BASE_DIR}/${PARENT_CA}/fullchain.pem" >> "${CA_DIR}/fullchain.pem"
   fi
   ln -s "certs/${CA}.cert.pem" "${CA_DIR}/cert.pem"
+  chmod 0444 "${CA_DIR}/fullchain.pem"
+  chmod 0444 "${CA_DIR}/chain.pem"
 }
 
 # The OpenSSL config file we will use.
@@ -171,16 +178,13 @@ if [ ! -f "${OPENSSL_CONFIG_FILE}.original" ]; then
   cp "${OPENSSL_CONFIG_FILE}" "${OPENSSL_CONFIG_FILE}.original"
 fi
 
-# Directory that contains all CAs.
-CA_BASE_DIR="/usr/local/etc/openssl/ca"
-
 # Create new OpenSSL config.
 cat <<EOD | >"${OPENSSL_CONFIG_FILE}"
 [ ca ]
 default_ca = $(id -F) Minikube CA
 
 [ $(id -F) Root CA ]
-dir = ./\$ENV::CA
+dir = \$ENV::CA_BASE_DIR/\$ENV::CA
 certs = \$dir/certs
 crl_dir = \$dir/crl
 database = \$dir/index.txt
@@ -200,9 +204,10 @@ policy = policy_match
 crl_extensions = crl_ext
 preserve = no
 email_in_dn = no
+unique_subject = no
 
 [ $(id -F) Minikube CA ]
-dir = ./\$ENV::CA
+dir = \$ENV::CA_BASE_DIR/\$ENV::CA
 certs = \$dir/certs
 crl_dir = \$dir/crl
 database = \$dir/index.txt
@@ -223,6 +228,7 @@ crl_extensions = crl_ext
 preserve = no
 email_in_dn = no
 copy_extensions = copy
+unique_subject = no
 
 [ policy_match ]
 countryName = match
@@ -329,7 +335,7 @@ openssl genrsa \
   -aes256 \
   -passout "pass:${TLS_CERT_PASSWORD}" \
   -out "${CA_DIR}/private/${TLS_CERT_DOMAIN}.key.pem" 2048
-chmod og-rwx "${CA_DIR}/private/${TLS_CERT_DOMAIN}.key.pem"
+chmod 0400 "${CA_DIR}/private/${TLS_CERT_DOMAIN}.key.pem"
 
 # Create certificate signing request.
 cat <<EOD | openssl req -config /dev/stdin \
@@ -373,6 +379,7 @@ openssl ca \
   -passin "pass:${CA_PASSWORD}" \
   -in "${CA_DIR}/csr/${TLS_CERT_DOMAIN}.csr.pem" \
   -out "${CA_DIR}/certs/${TLS_CERT_DOMAIN}.cert.pem"
+chmod 0444 "${CA_DIR}/certs/${TLS_CERT_DOMAIN}.cert.pem"
 
 # View certificate.
 openssl x509 -in "${CA_DIR}/certs/${TLS_CERT_DOMAIN}.cert.pem" \
@@ -383,6 +390,10 @@ openssl x509 -in "${CA_DIR}/certs/${TLS_CERT_DOMAIN}.cert.pem" \
 PARENT_CA="$(id -F) Root CA"
 openssl verify -CAfile "${CA_BASE_DIR}/${PARENT_CA}/fullchain.pem" \
   "${CA_DIR}/cert.pem"
+
+# Delete old certificate if it exists.
+kubectl --namespace "${K8S_NAMESPACE}" get secret minikube-tls 2>/dev/null && \
+  kubectl --namespace "${K8S_NAMESPACE}" delete secret minikube-tls
 
 # Import certificate into Kubernetes. We only import the chain, not the
 # full chain.
