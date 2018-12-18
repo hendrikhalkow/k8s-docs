@@ -102,7 +102,7 @@ helm init
 helm repo update
 
 # Create namespace.
-K8S_NAMESPACE="otto"
+K8S_NAMESPACE="yournamespace"
 kubectl create namespace "${K8S_NAMESPACE}"
 
 # In another shell, watch your namespace.

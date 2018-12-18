@@ -31,10 +31,10 @@ kubectl run kafka-shell --generator=run-pod/v1 \
 # Play with your Kafka cluster
 
 # Create virtual Python environment.
-python -m venv "${HOME}/.venv/otto"
+python -m venv "${HOME}/.venv/yourvirtualenv"
 
 # Activate virtual Python environment.
-source "${HOME}/.venv/otto/bin/activate"
+source "${HOME}/.venv/yourvirtualenv/bin/activate"
 
 # Install confluent-kafka. See
 # <https://github.com/confluentinc/confluent-kafka-python>.
@@ -171,7 +171,7 @@ curl https://schema-registry.minikube.local/subjects | jq
 ## Grafana and Prometheus
 
 ```zsh
-helm install --namespace otto stable/grafana --name grafana
+helm install --namespace "${K8S_NAMESPACE}" stable/grafana --name grafana
 cat <<EOD | kubectl create -f -
 apiVersion: extensions/v1beta1
 kind: Ingress
@@ -195,9 +195,10 @@ spec:
           serviceName: grafana
           servicePort: 80
 EOD
-kubectl get secret --namespace otto grafana -o jsonpath='{.data.admin-password}' | base64 --decode
+kubectl get secret --namespace "${K8S_NAMESPACE}" grafana \
+  -o jsonpath='{.data.admin-password}' | base64 --decode
 
-helm install --namespace otto stable/prometheus --name prometheus
+helm install --namespace "${K8S_NAMESPACE}" stable/prometheus --name prometheus
 cat <<EOD | kubectl create -f -
 apiVersion: extensions/v1beta1
 kind: Ingress

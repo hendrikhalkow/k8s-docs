@@ -3,7 +3,7 @@
 from confluent_kafka import Consumer, KafkaError
 
 consumer = Consumer({
-    'bootstrap.servers': 'confluent-cp-kafka.otto.svc.cluster.local',
+    'bootstrap.servers': 'confluent-cp-kafka.yournamespace.svc.cluster.local',
     'group.id': 'mygroup',
     'auto.offset.reset': 'earliest'
 })

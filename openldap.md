@@ -5,8 +5,8 @@
 ```zsh
 # Install OpenLDAP.
 helm install stable/openldap \
-  --set env.LDAP_ORGANISATION="Otto (GmbH & Co KG)" \
-  --set env.LDAP_DOMAIN=otto.de \
+  --set env.LDAP_ORGANISATION="Hendrik M Halkow" \
+  --set env.LDAP_DOMAIN=h5k.io \
   --namespace "${K8S_NAMESPACE}" \
   --name openldap
 
@@ -23,21 +23,21 @@ echo "${LDAP_ADMIN_PASSWORD}"
 ldapsearch \
   -H "ldap://openldap.${K8S_NAMESPACE}.svc.cluster.local" \
   -x \
-  -D "cn=admin,dc=otto,dc=de" \
+  -D "cn=admin,dc=h5k,dc=io" \
   -w "${LDAP_ADMIN_PASSWORD}" \
-  -b dc=otto,dc=de
+  -b dc=h5k,dc=io
 
 # Add entries.
 ldapadd \
   -H "ldap://openldap.${K8S_NAMESPACE}.svc.cluster.local" \
   -x \
-  -D "cn=admin,dc=otto,dc=de" \
+  -D "cn=admin,dc=h5k,dc=io" \
   -w "${LDAP_ADMIN_PASSWORD}" <<-EOD
-dn: ou=users,dc=otto,dc=de
+dn: ou=users,dc=h5k,dc=io
 ou: users
 objectClass: organizationalUnit
 
-dn: uid=hehalkow,ou=users,dc=otto,dc=de
+dn: uid=hehalkow,ou=users,dc=h5k,dc=io
 objectClass: top
 objectClass: person
 objectClass: organizationalPerson
@@ -47,20 +47,19 @@ sn: Halkow
 givenName: Hendrik
 uid: hehalkow
 ou: People
-mail: hendrik.halkow@otto.de
-description: This is Hendrik.
+mail: hendrik@halkow.com
 telephoneNumber: +49 163 5696969
 userPassword: {SSHA}dcWy5Ph0Ub0TA5dL94FXArc5GMZEzbcG
 
-dn: ou=groups,dc=otto,dc=de
+dn: ou=groups,dc=h5k,dc=io
 ou: groups
 objectClass: organizationalUnit
 
-dn: cn=admins,ou=groups,dc=otto,dc=de
+dn: cn=admins,ou=groups,dc=h5k,dc=io
 objectClass: groupOfNames
 cn: admins
 description: Administrators
-member: uid=hehalkow,ou=users,dc=otto,dc=de
+member: uid=hehalkow,ou=users,dc=h5k,dc=io
 EOD
 ```
 
@@ -69,8 +68,8 @@ EOD
 ```powershell
 # Install OpenLDAP.
 helm install stable/openldap `
-  --set env.LDAP_ORGANISATION=h5k `
-  --set env.LDAP_DOMAIN=otto.de `
+  --set env.LDAP_ORGANISATION="Hendrik M Halkow" `
+  --set env.LDAP_DOMAIN=h5k.io `
   --namespace "${K8S_NAMESPACE}" `
   --name openldap
 ```

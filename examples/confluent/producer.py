@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 from confluent_kafka import Producer
-producer = Producer({'bootstrap.servers': 'confluent-cp-kafka.otto.svc.cluster.local'})
+producer = Producer(
+    {'bootstrap.servers': 'confluent-cp-kafka.yournamespace.svc.cluster.local'}
+)
 
 def delivery_report(err, msg):
     """ Called once for each message produced to indicate delivery result.

@@ -77,10 +77,10 @@ vault auth enable ldap
 vault write auth/ldap/config \
   url="ldap://openldap.${K8S_NAMESPACE}.svc.cluster.local" \
   userattr="uid" \
-  binddn="cn=admin,dc=otto,dc=de" \
+  binddn="cn=admin,dc=h5k,dc=io" \
   bindpass="${LDAP_ADMIN_PASSWORD}" \
-  userdn="ou=users,dc=otto,dc=de" \
-  groupdn="ou=groups,dc=otto,dc=de" \
+  userdn="ou=users,dc=h5k,dc=io" \
+  groupdn="ou=groups,dc=h5k,dc=io" \
   starttls=false
 
 # Create policy
