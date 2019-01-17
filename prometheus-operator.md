@@ -25,10 +25,10 @@ metadata:
 spec:
   tls:
     - hosts:
-      - grafana.minikube.local
+      - grafana.monitoring.minikube.local
       secretName: minikube-tls
   rules:
-  - host: grafana.minikube.local
+  - host: grafana.monitoring.minikube.local
     http:
       paths:
       - path: /

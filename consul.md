@@ -16,7 +16,7 @@ helm install \
   ./consul-helm
 
 # Create ingress.
-CONSUL_HOST="consul.minikube.local"
+CONSUL_HOST="consul.${K8S_NAMESPACE}.minikube.local"
 CONSUL_URL="https://${CONSUL_HOST}"
 cat <<EOD | kubectl create -f -
 apiVersion: extensions/v1beta1

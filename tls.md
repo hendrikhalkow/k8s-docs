@@ -290,7 +290,7 @@ ca_set_context
 PARENT_CA="" ca_init
 
 # Delete old certificate if it exists.
-sudo security delete-certificate -c "${CA}" -t 2>/dev/null || true
+sudo security delete-certificate -c "${CA}" -t
 
 # Add root CA to key chain.
 sudo security add-trusted-cert -d -k /Library/Keychains/System.keychain \

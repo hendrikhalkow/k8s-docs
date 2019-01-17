@@ -57,7 +57,7 @@ curl -Ls https://api.github.com/repos/kubernetes/kubernetes/releases | \
   jq -r '.[].name'
 
 # Choose your desired version, for example
-K8S_VERSION="v1.13.1"
+K8S_VERSION="v1.13.2"
 
 # Start Minikube. Adjust CPU cores and memory to your needs. If you are unsure,
 # leave these parameters out. The following examples uses half of the logical
@@ -270,11 +270,30 @@ into your cluster as described in the [custom CA documentation](tls.md).
 In this example, we use `kube-system.minikube.local` as our domain.
 
 ```zsh
+# Set up variables.
+K8S_NAMESPACE="kube-system"
+TLS_CERT_DOMAIN="${K8S_NAMESPACE}.minikube.local"
+TLS_CERT_PASSWORD_NAME="TLS certificate key password for ${TLS_CERT_DOMAIN}"
+TLS_CERT_PASSWORD="$(security find-generic-password -a ${USER} \
+  -s "${TLS_CERT_PASSWORD_NAME}" -w)"
+
+# Issue and import certificate.
+kubectl --namespace "${K8S_NAMESPACE}" create secret tls minikube-tls \
+  --key <(openssl rsa \
+    -in "${CA_DIR}/private/${TLS_CERT_DOMAIN}.key.pem" \
+    -passin "pass:${TLS_CERT_PASSWORD}") \
+  --cert <(cat \
+    "${CA_DIR}/certs/${TLS_CERT_DOMAIN}.cert.pem" \
+    "${CA_DIR}/chain.pem")
+
+# Create ingress.
+K8S_DASHBOARD_HOST="dashboard.${TLS_CERT_DOMAIN}"
+K8S_DASHBOARD_URL="https://${K8S_DASHBOARD_HOST}"
 cat <<EOD | kubectl create -f -
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
-  namespace: kube-system
+  namespace: ${K8S_NAMESPACE}
   name: kubernetes-dashboard
   annotations:
     kubernetes.io/ingress.class: "nginx"
@@ -282,10 +301,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - dashboard.kube-system.minikube.local
+    - ${K8S_DASHBOARD_HOST}
     secretName: minikube-tls
   rules:
-  - host: dashboard.kube-system.minikube.local
+  - host: ${K8S_DASHBOARD_HOST}
     http:
       paths:
       - path: /
@@ -293,4 +312,5 @@ spec:
           serviceName: kubernetes-dashboard
           servicePort: 80
 EOD
+echo "Kubernetes dashboard URL: ${K8S_DASHBOARD_URL}"
 ```
