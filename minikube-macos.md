@@ -3,11 +3,11 @@
 ## TODO
 
 - brew tap for coredns
-- /etc/resolver/minikube.local
-- don't use hyperkit vm driver
+-
 - document why ssl in docker
 - reboot on hypervisor change due to messed up network configuration
 - ingress for dashboard
+- install VMWare unified driver
 
 ## Prerequisites
 
@@ -16,28 +16,37 @@
 /usr/bin/ruby -e "$(curl -fsSL \
   https://raw.githubusercontent.com/Homebrew/install/master/install)"
 
-# Homebrew Cask
-brew tap caskroom/cask
-
-# SDKMAN!
-curl -s "https://get.sdkman.io" | bash
-
 # Install required packages.
-brew install kubernetes-cli jq coredns
-sdk install java
-sdk install gradle
+brew install kubernetes-cli kubernetes-helm jq
 
 # Install at least one of the following 3:
-# 1)
+# 1) VMware Fusion and Docker Machine driver for VMware
 brew cask install minikube vmware-fusion
-# 2)
+DMDVM_VERSION_URL="https://api.github.com/repos/machine-drivers"
+DMDVM_VERSION_URL="${DMDVM_VERSION_URL}/docker-machine-driver-vmware"
+DMDVM_VERSION_URL="${DMDVM_VERSION_URL}/releases/latest"
+DMDVM_VERSION="$(curl -Ls ${DMDVM_VERSION_URL}| jq -r '.tag_name')"
+DMDVM_URL="https://github.com/machine-drivers/docker-machine-driver-vmware"
+DMDVM_URL="${DMDVM_URL}/releases/download/${DMDVM_VERSION}"
+DMDVM_URL="${DMDVM_URL}/docker-machine-driver-vmware_darwin_amd64"
+curl -L -o docker-machine-driver-vmware "${DMDVM_URL}"
+chmod +x docker-machine-driver-vmware \
+mv docker-machine-driver-vmware /usr/local/bin/
+MINIKUBE_VM_DRIVER="vmware"
+
+# 2) VirtualBox (driver comes with Minikube). Be aware that VirtualBox does not
+# work with nested virtualization that you need for Kata Containers.
 brew cask install minikube virtualbox
-# 3)
+MINIKUBE_VM_DRIVER="virtualbox"
+
+# 3) Hyperkit (driver only as Hyperkit is part of macOS). Be aware that routing
+# into HyperKit does not work.
 brew install docker-machine-driver-hyperkit
-DMDH_PATH="/usr/local/opt/docker-machine-driver-hyperkit/bin"
-DMDH_PATH="${DMDH_PATH}/docker-machine-driver-hyperkit"
-sudo chown root:wheel "${DMDH_PATH}"
-sudo chmod u+s "${DMDH_PATH}"
+DMDHK_PATH="/usr/local/opt/docker-machine-driver-hyperkit/bin"
+DMDHK_PATH="${DMDHK_PATH}/docker-machine-driver-hyperkit"
+sudo chown root:wheel "${DMDHK_PATH}"
+sudo chmod u+s "${DMDHK_PATH}"
+MINIKUBE_VM_DRIVER="hyperkit"
 ```
 
 ## Start up Minikube
@@ -51,34 +60,26 @@ brew cask upgrade
 # In case you want to start freshly, remove your old minikube.
 minikube delete
 rm -rf "${HOME}/.minikube"
+rm -rf "${HOME}/.kube"
 
-# List all Kubernetes versions
+# Set your Kubernetes version variable to an appropriate value. It might be a
+# good idea to use the same version as kubectl ...
+K8S_VERSION="$(kubectl version --client --output json | \
+  jq -r '.clientVersion.gitVersion')"
+
+# ... or the latest stable version
+K8S_VERSION="$(curl -s \
+  https://storage.googleapis.com/kubernetes-release/release/stable.txt)"
+
+# ... or another version that you can pick from the list of all versions.
 curl -Ls https://api.github.com/repos/kubernetes/kubernetes/releases | \
   jq -r '.[].name'
-
-# Choose your desired version, for example
-K8S_VERSION="v1.13.2"
 
 # Start Minikube. Adjust CPU cores and memory to your needs. If you are unsure,
 # leave these parameters out. The following examples uses half of the logical
 # CPU cores and half of total RAM.
 minikube start \
-  --vm-driver=vmwarefusion \
-  --kubernetes-version="${K8S_VERSION}" \
-  --cpus="$(( $(sysctl -n hw.ncpu) / 2 ))" \
-  --memory="$(( $(sysctl -n hw.memsize) / 1024**2 / 2 ))"
-
-# Alternatively, use VirtualBox. Be aware that VirtualBox does not work with
-# nested virtualization.
-minikube start \
-  --vm-driver=virtualbox \
-  --kubernetes-version="${K8S_VERSION}" \
-  --cpus="$(( $(sysctl -n hw.ncpu) / 2 ))" \
-  --memory="$(( $(sysctl -n hw.memsize) / 1024**2 / 2 ))"
-
-# ... or HyperKit. Be aware that routing into HyperKit does not work.
-minikube start \
-  --vm-driver=hyperkit \
+  --vm-driver="${MINIKUBE_VM_DRIVER}" \
   --kubernetes-version="${K8S_VERSION}" \
   --cpus="$(( $(sysctl -n hw.ncpu) / 2 ))" \
   --memory="$(( $(sysctl -n hw.memsize) / 1024**2 / 2 ))"
@@ -106,16 +107,19 @@ K8S_NAMESPACE="yournamespace"
 kubectl create namespace "${K8S_NAMESPACE}"
 
 # In another shell, watch your namespace.
-watch -n1 kubectl get all,ing,pvc,secret --namespace="${K8S_NAMESPACE}"
+watch -n1 kubectl get all,pvc,secret --namespace="${K8S_NAMESPACE}"
 ```
 
 ## Make Minikube domain resolvable from host
 
-Create a CoreDNS config file at `/usr/local/etc/coredns/Corefile` with the
-following content.
+```zsh
+brew tap "coredns/deployment" "https://github.com/coredns/deployment"
+brew install  coredns
 
-```txt
-.:5300 {
+# Create a CoreDNS config file at `/usr/local/etc/coredns/Corefile` with the
+# following content.
+cat <<EOD >/usr/local/etc/coredns/Corefile
+.:53 {
   proxy . 8.8.8.8:53 8.8.4.4:53 {
     protocol https_google
   }
@@ -126,16 +130,25 @@ following content.
   errors
   cache
 }
-```
+EOD
 
-Start CoreDNS service with `brew services start coredns`. The log file is
-available at `/usr/local/var/log/coredns.log`.
+# Start CoreDNS service. Make sure that you have your firewall enabled to avoid
+# exposing your DNS server. The log file will be available at
+# `/usr/local/var/log/coredns.log`.
+sudo brew services start coredns/deployment/coredns
 
-Each time Minikube is started, it's IP must be written to the zone file with
-the following command.
+# Create /etc/resolver if it doesn't exist.
+if [ ! -d /etc/resolver ]
+then
+  sudo mkdir -p /etc/resolver
+fi
 
-```zsh
-# Get current serial. This command will fail if the file does not exist, but
+# Put your nameserver into /etc/resolver/minikube.local to make macOS use it as
+# a resolver for your minikube.local domain.
+echo "nameserver 127.0.0.1" | sudo tee /etc/resolver/minikube.local
+
+# Each time Minikube is started, it's IP must be written to the zone file with
+# the following command. This will fail if the file does not exist, but
 # it doesn't matter.
 SERIAL=$(grep '@ IN SOA' /usr/local/etc/coredns/db.minikube.local \
   | awk '{ print $6 }')
@@ -164,7 +177,7 @@ Attention: The following does not work with the HyperKit driver.
 ```zsh
 # Install minikube-lb-patch to make load balancers get an IP address
 cat <<EOD | kubectl create -f -
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   namespace: kube-system
